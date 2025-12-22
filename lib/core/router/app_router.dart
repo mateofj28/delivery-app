@@ -7,6 +7,12 @@ import '../../presentation/screens/products_screen.dart';
 import '../../presentation/screens/cart_screen.dart';
 import '../../presentation/screens/order_form_screen.dart';
 import '../../presentation/screens/confirmation_screen.dart';
+import '../../presentation/screens/admin/admin_login_screen.dart';
+import '../../presentation/screens/admin/admin_dashboard_screen.dart';
+import '../../presentation/screens/admin/business_management_screen.dart';
+import '../../presentation/screens/admin/business_form_screen.dart';
+import '../../presentation/screens/admin/product_management_screen.dart';
+import '../../presentation/screens/admin/product_form_screen.dart';
 
 final appRouter = GoRouter(
   initialLocation: '/',
@@ -37,6 +43,56 @@ final appRouter = GoRouter(
           );
         }
         return ConfirmationScreen(order: order);
+      },
+    ),
+
+    // Rutas de administración
+    GoRoute(
+      path: '/admin/login',
+      builder: (context, state) => const AdminLoginScreen(),
+    ),
+    GoRoute(
+      path: '/admin/dashboard',
+      builder: (context, state) => const AdminDashboardScreen(),
+    ),
+    GoRoute(
+      path: '/admin/businesses',
+      builder: (context, state) => const BusinessManagementScreen(),
+    ),
+    GoRoute(
+      path: '/admin/business/create',
+      builder: (context, state) => const BusinessFormScreen(),
+    ),
+    GoRoute(
+      path: '/admin/business/:businessId/edit',
+      builder: (context, state) {
+        final businessId = state.pathParameters['businessId']!;
+        return BusinessFormScreen(businessId: businessId);
+      },
+    ),
+    GoRoute(
+      path: '/admin/business/:businessId/products',
+      builder: (context, state) {
+        final businessId = state.pathParameters['businessId']!;
+        return ProductManagementScreen(businessId: businessId);
+      },
+    ),
+    GoRoute(
+      path: '/admin/business/:businessId/product/create',
+      builder: (context, state) {
+        final businessId = state.pathParameters['businessId']!;
+        return ProductFormScreen(businessId: businessId);
+      },
+    ),
+    GoRoute(
+      path: '/admin/business/:businessId/product/:productId/edit',
+      builder: (context, state) {
+        final businessId = state.pathParameters['businessId']!;
+        final productId = state.pathParameters['productId']!;
+        return ProductFormScreen(
+          businessId: businessId,
+          productId: productId,
+        );
       },
     ),
   ],

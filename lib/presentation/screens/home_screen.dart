@@ -36,9 +36,9 @@ class HomeScreen extends StatelessWidget {
               Text(
                 'DeliveryApp',
                 style: Theme.of(context).textTheme.headlineLarge?.copyWith(
-                  fontWeight: FontWeight.bold,
-                  color: AppColors.primary,
-                ),
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.primary,
+                    ),
               ),
 
               const SizedBox(height: 16),
@@ -62,6 +62,32 @@ class HomeScreen extends StatelessWidget {
                   child: const Text(
                     'Pedir domicilio',
                     style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+                  ),
+                ),
+              ),
+
+              const SizedBox(height: 16),
+
+              // Botón de administrador
+              SizedBox(
+                width: double.infinity,
+                height: 48,
+                child: OutlinedButton.icon(
+                  onPressed: () => context.go('/admin/login'),
+                  icon: const Icon(Icons.admin_panel_settings),
+                  label: const Text(
+                    'Panel de Administración',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppColors.primary,
+                    side: const BorderSide(color: AppColors.primary),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(24),
+                    ),
                   ),
                 ),
               ),
