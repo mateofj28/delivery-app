@@ -13,11 +13,30 @@ import '../../presentation/screens/admin/business_management_screen.dart';
 import '../../presentation/screens/admin/business_form_screen.dart';
 import '../../presentation/screens/admin/product_management_screen.dart';
 import '../../presentation/screens/admin/product_form_screen.dart';
+// Importar las nuevas pantallas de autenticación
+import '../../presentation/screens/auth/login_screen.dart';
+import '../../presentation/screens/auth/register_screen.dart';
+import '../../presentation/screens/auth/forgot_password_screen.dart';
 
 final appRouter = GoRouter(
-  initialLocation: '/',
+  initialLocation: '/login', // Cambiar la ruta inicial al login
   routes: [
-    GoRoute(path: '/', builder: (context, state) => const HomeScreen()),
+    // Rutas de autenticación
+    GoRoute(
+      path: '/login',
+      builder: (context, state) => const LoginScreen(),
+    ),
+    GoRoute(
+      path: '/register',
+      builder: (context, state) => const RegisterScreen(),
+    ),
+    GoRoute(
+      path: '/forgot-password',
+      builder: (context, state) => const ForgotPasswordScreen(),
+    ),
+    
+    // Rutas principales (protegidas)
+    GoRoute(path: '/home', builder: (context, state) => const HomeScreen()),
     GoRoute(
       path: '/businesses',
       builder: (context, state) => const BusinessListScreen(),
