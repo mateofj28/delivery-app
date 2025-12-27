@@ -19,8 +19,11 @@ import '../../presentation/screens/auth/register_screen.dart';
 import '../../presentation/screens/auth/forgot_password_screen.dart';
 
 final appRouter = GoRouter(
-  initialLocation: '/login', // Cambiar la ruta inicial al login
+  initialLocation: '/', // Cambiar a la ruta raíz
   routes: [
+    // Ruta principal (pantalla de inicio con fondo primary)
+    GoRoute(path: '/', builder: (context, state) => const HomeScreen()),
+    
     // Rutas de autenticación
     GoRoute(
       path: '/login',
@@ -35,8 +38,7 @@ final appRouter = GoRouter(
       builder: (context, state) => const ForgotPasswordScreen(),
     ),
     
-    // Rutas principales (protegidas)
-    GoRoute(path: '/home', builder: (context, state) => const HomeScreen()),
+    // Rutas principales
     GoRoute(
       path: '/businesses',
       builder: (context, state) => const BusinessListScreen(),

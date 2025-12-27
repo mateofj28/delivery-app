@@ -5,7 +5,8 @@ import 'package:go_router/go_router.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../domain/entities/business.dart';
 import '../../providers/admin_provider.dart';
-import '../../providers/business_provider.dart';
+import '../../providers/product_management_provider.dart';
+import '../../providers/business_management_provider.dart';
 
 class ProductFormScreen extends ConsumerStatefulWidget {
   final String businessId;
@@ -32,7 +33,7 @@ class _ProductFormScreenState extends ConsumerState<ProductFormScreen> {
   bool _isLoading = false;
 
   Product? _existingProduct;
-  Business? _business;
+  String? _businessName;
 
   final List<String> _commonCategories = [
     'Platos principales',
@@ -47,28 +48,57 @@ class _ProductFormScreenState extends ConsumerState<ProductFormScreen> {
   @override
   void initState() {
     super.initState();
-    _loadData();
+    // Retrasar la carga de datos hasta después de que el widget tree termine de construirse
+    Future.microtask(() => _loadData());
   }
 
-  void _loadData() {
-    final businesses = ref.read(businessManagementProvider);
-    _business = businesses.firstWhere(
-      (b) => b.id == widget.businessId,
-      orElse: () => throw Exception('Negocio no encontrado'),
-    );
+  Future<void> _loadData() async {
+    setState(() {
+      _isLoading = true;
+    });
 
-    if (widget.productId != null) {
-      _existingProduct = _business!.products.firstWhere(
-        (p) => p.id == widget.productId,
-        orElse: () => throw Exception('Producto no encontrado'),
+    try {
+      // Cargar productos del negocio
+      await ref
+          .read(productManagementProvider.notifier)
+          .loadProductsByBusiness(widget.businessId);
+
+      if (widget.productId != null) {
+        final repository = ref.read(productRepositoryProvider);
+        _existingProduct = await repository.getProductById(
+          widget.businessId,
+          widget.productId!,
+        );
+
+        if (_existingProduct != null) {
+          _nameController.text = _existingProduct!.name;
+          _priceController.text = _existingProduct!.price.toString();
+          _descriptionController.text = _existingProduct!.description;
+          _categoryController.text = _existingProduct!.category ?? '';
+          _imageUrlController.text = _existingProduct!.imageUrl ?? '';
+          _isAvailable = _existingProduct!.isAvailable;
+        }
+      }
+
+      // Obtener nombre del negocio
+      final businessRepository = ref.read(businessRepositoryProvider);
+      final business = await businessRepository.getBusinessById(
+        widget.businessId,
       );
-
-      _nameController.text = _existingProduct!.name;
-      _priceController.text = _existingProduct!.price.toString();
-      _descriptionController.text = _existingProduct!.description;
-      _categoryController.text = _existingProduct!.category ?? '';
-      _imageUrlController.text = _existingProduct!.imageUrl ?? '';
-      _isAvailable = _existingProduct!.isAvailable;
+      _businessName = business?.name ?? 'Negocio';
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error al cargar datos: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      setState(() {
+        _isLoading = false;
+      });
     }
   }
 
@@ -88,48 +118,80 @@ class _ProductFormScreenState extends ConsumerState<ProductFormScreen> {
         _isLoading = true;
       });
 
-      final product = Product(
-        id:
-            widget.productId ??
-            DateTime.now().millisecondsSinceEpoch.toString(),
-        name: _nameController.text.trim(),
-        price: double.parse(_priceController.text.trim()),
-        description: _descriptionController.text.trim(),
-        category: _categoryController.text.trim().isEmpty
-            ? null
-            : _categoryController.text.trim(),
-        isAvailable: _isAvailable,
-        imageUrl: _imageUrlController.text.trim().isEmpty
-            ? null
-            : _imageUrlController.text.trim(),
-      );
+      try {
+        final product = widget.productId != null
+            ? _existingProduct!.copyWith(
+                name: _nameController.text.trim(),
+                price: double.parse(_priceController.text.trim()),
+                description: _descriptionController.text.trim(),
+                category: _categoryController.text.trim().isEmpty
+                    ? null
+                    : _categoryController.text.trim(),
+                isAvailable: _isAvailable,
+                imageUrl: _imageUrlController.text.trim().isEmpty
+                    ? null
+                    : _imageUrlController.text.trim(),
+              )
+            : Product.create(
+                name: _nameController.text.trim(),
+                price: double.parse(_priceController.text.trim()),
+                description: _descriptionController.text.trim(),
+                category: _categoryController.text.trim().isEmpty
+                    ? null
+                    : _categoryController.text.trim(),
+                imageUrl: _imageUrlController.text.trim().isEmpty
+                    ? null
+                    : _imageUrlController.text.trim(),
+              );
 
-      if (widget.productId != null) {
-        ref
-            .read(businessManagementProvider.notifier)
-            .updateProductInBusiness(widget.businessId, product);
-      } else {
-        ref
-            .read(businessManagementProvider.notifier)
-            .addProductToBusiness(widget.businessId, product);
-      }
+        bool success;
+        if (widget.productId != null) {
+          success = await ref
+              .read(productManagementProvider.notifier)
+              .updateProduct(widget.businessId, product);
+        } else {
+          final productId = await ref
+              .read(productManagementProvider.notifier)
+              .createProduct(widget.businessId, product);
+          success = productId != null;
+        }
 
-      setState(() {
-        _isLoading = false;
-      });
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              widget.productId != null
-                  ? 'Producto actualizado'
-                  : 'Producto creado exitosamente',
-            ),
-            backgroundColor: Colors.green,
-          ),
-        );
-        context.go('/admin/business/${widget.businessId}/products');
+        if (mounted) {
+          if (success) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(
+                  widget.productId != null
+                      ? 'Producto actualizado exitosamente'
+                      : 'Producto creado exitosamente',
+                ),
+                backgroundColor: Colors.green,
+              ),
+            );
+            context.go('/admin/business/${widget.businessId}/products');
+          } else {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(
+                  widget.productId != null
+                      ? 'Error al actualizar el producto'
+                      : 'Error al crear el producto',
+                ),
+                backgroundColor: Colors.red,
+              ),
+            );
+          }
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+          );
+        }
+      } finally {
+        setState(() {
+          _isLoading = false;
+        });
       }
     }
   }
@@ -195,6 +257,14 @@ class _ProductFormScreenState extends ConsumerState<ProductFormScreen> {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
+    if (_isLoading && widget.productId != null) {
+      return Scaffold(
+        backgroundColor: AppColors.background,
+        appBar: AppBar(title: const Text('Cargando...')),
+        body: const Center(child: CircularProgressIndicator()),
+      );
+    }
+
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
@@ -225,7 +295,7 @@ class _ProductFormScreenState extends ConsumerState<ProductFormScreen> {
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      'Negocio: ${_business?.name ?? ''}',
+                      'Negocio: ${_businessName ?? 'Cargando...'}',
                       style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                         color: AppColors.textSecondary,
                       ),
@@ -241,6 +311,9 @@ class _ProductFormScreenState extends ConsumerState<ProductFormScreen> {
                       validator: (value) {
                         if (value == null || value.trim().isEmpty) {
                           return 'El nombre es requerido';
+                        }
+                        if (value.trim().length < 2) {
+                          return 'El nombre debe tener al menos 2 caracteres';
                         }
                         return null;
                       },
@@ -266,7 +339,10 @@ class _ProductFormScreenState extends ConsumerState<ProductFormScreen> {
                         }
                         final price = double.tryParse(value);
                         if (price == null || price <= 0) {
-                          return 'Ingresa un precio válido';
+                          return 'Ingresa un precio válido mayor a 0';
+                        }
+                        if (price > 1000000) {
+                          return 'El precio no puede ser mayor a \$1.000.000';
                         }
                         return null;
                       },
@@ -283,6 +359,9 @@ class _ProductFormScreenState extends ConsumerState<ProductFormScreen> {
                       validator: (value) {
                         if (value == null || value.trim().isEmpty) {
                           return 'La descripción es requerida';
+                        }
+                        if (value.trim().length < 10) {
+                          return 'La descripción debe tener al menos 10 caracteres';
                         }
                         return null;
                       },
@@ -333,6 +412,45 @@ class _ProductFormScreenState extends ConsumerState<ProductFormScreen> {
                         });
                       },
                       activeColor: AppColors.primary,
+                    ),
+                    const SizedBox(height: 16),
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: AppColors.accent.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              const Icon(
+                                Icons.info_outline,
+                                color: AppColors.accent,
+                                size: 20,
+                              ),
+                              const SizedBox(width: 8),
+                              Text(
+                                'Consejos',
+                                style: Theme.of(context).textTheme.titleSmall
+                                    ?.copyWith(
+                                      fontWeight: FontWeight.bold,
+                                      color: AppColors.accent,
+                                    ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          const Text(
+                            '• Usa nombres descriptivos y atractivos\n'
+                            '• Incluye ingredientes principales en la descripción\n'
+                            '• Las categorías ayudan a organizar el menú\n'
+                            '• Las imágenes aumentan las ventas',
+                            style: TextStyle(fontSize: 13),
+                          ),
+                        ],
+                      ),
                     ),
                   ],
                 ),

@@ -1,118 +1,184 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../domain/entities/business.dart';
 import '../../domain/repositories/business_repository.dart';
 
+/// Implementación concreta del repositorio de negocios con Firestore
+/// Sigue el principio de Inversión de Dependencias (DIP)
 class BusinessRepositoryImpl implements BusinessRepository {
-  @override
-  Future<List<Business>> getBusinesses() async {
-    // Simulamos datos estáticos
-    await Future.delayed(const Duration(milliseconds: 500));
+  final FirebaseFirestore _firestore;
+  static const String _collection = 'businesses';
 
-    return [
-      const Business(
-        id: '1',
-        name: 'Pizza Express',
-        icon: '🍕',
-        whatsappNumber: '+573026699574',
-        description: 'Las mejores pizzas artesanales de la ciudad',
-        address: 'Calle 123 #45-67, Centro',
-        isActive: true,
-        products: [
-          Product(
-            id: '1',
-            name: 'Pizza Margherita',
-            price: 25000,
-            description: 'Pizza clásica con tomate, mozzarella y albahaca',
-            category: 'Platos principales',
-            isAvailable: true,
-          ),
-          Product(
-            id: '2',
-            name: 'Pizza Pepperoni',
-            price: 28000,
-            description: 'Pizza con pepperoni y queso mozzarella',
-            category: 'Platos principales',
-            isAvailable: true,
-          ),
-          Product(
-            id: '3',
-            name: 'Pizza Hawaiana',
-            price: 30000,
-            description: 'Pizza con jamón, piña y queso',
-            category: 'Platos principales',
-            isAvailable: true,
-          ),
-        ],
-      ),
-      const Business(
-        id: '2',
-        name: 'Burger House',
-        icon: '🍔',
-        whatsappNumber: '+573026699574',
-        description: 'Hamburguesas gourmet y papas crujientes',
-        address: 'Carrera 98 #76-54, Norte',
-        isActive: true,
-        products: [
-          Product(
-            id: '4',
-            name: 'Hamburguesa Clásica',
-            price: 18000,
-            description: 'Carne, lechuga, tomate, cebolla y salsas',
-            category: 'Platos principales',
-            isAvailable: true,
-          ),
-          Product(
-            id: '5',
-            name: 'Hamburguesa BBQ',
-            price: 22000,
-            description: 'Carne, queso, cebolla caramelizada y salsa BBQ',
-            category: 'Platos principales',
-            isAvailable: true,
-          ),
-          Product(
-            id: '6',
-            name: 'Papas Fritas',
-            price: 8000,
-            description: 'Papas fritas crujientes',
-            category: 'Acompañamientos',
-            isAvailable: true,
-          ),
-        ],
-      ),
-      const Business(
-        id: '3',
-        name: 'Sushi Zen',
-        icon: '🍣',
-        whatsappNumber: '+573026699574',
-        description: 'Auténtica comida japonesa',
-        address: 'Avenida 15 #23-89, Sur',
-        isActive: true,
-        products: [
-          Product(
-            id: '7',
-            name: 'Roll California',
-            price: 35000,
-            description: 'Salmón, aguacate, pepino y ajonjolí',
-            category: 'Platos principales',
-            isAvailable: true,
-          ),
-          Product(
-            id: '8',
-            name: 'Roll Philadelphia',
-            price: 38000,
-            description: 'Salmón, queso crema y cebollín',
-            category: 'Platos principales',
-            isAvailable: true,
-          ),
-          Product(
-            id: '9',
-            name: 'Sopa Miso',
-            price: 12000,
-            description: 'Sopa tradicional japonesa',
-            category: 'Entradas',
-            isAvailable: true,
-          ),
-        ],
-      ),
-    ];
+  BusinessRepositoryImpl({FirebaseFirestore? firestore})
+    : _firestore = firestore ?? FirebaseFirestore.instance;
+
+  @override
+  Future<String> createBusiness(Business business) async {
+    try {
+      final docRef = _firestore.collection(_collection).doc();
+      final businessWithId = business.copyWith(
+        id: docRef.id,
+        updatedAt: DateTime.now(),
+      );
+
+      await docRef.set(businessWithId.toJson());
+      return docRef.id;
+    } catch (e) {
+      throw _handleFirestoreException(e, 'Error creating business');
+    }
+  }
+
+  @override
+  Future<Business?> getBusinessById(String businessId) async {
+    try {
+      final doc = await _firestore
+          .collection(_collection)
+          .doc(businessId)
+          .get();
+
+      if (!doc.exists || doc.data() == null) {
+        return null;
+      }
+
+      return Business.fromJson(doc.data()!);
+    } catch (e) {
+      throw _handleFirestoreException(e, 'Error getting business');
+    }
+  }
+
+  @override
+  Future<List<Business>> getAllBusinesses() async {
+    try {
+      final querySnapshot = await _firestore.collection(_collection).get();
+
+      final businesses = querySnapshot.docs
+          .map((doc) => Business.fromJson(doc.data()))
+          .toList();
+
+      // Ordenar en memoria por createdAt descendente
+      businesses.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+
+      return businesses;
+    } catch (e) {
+      throw _handleFirestoreException(e, 'Error getting all businesses');
+    }
+  }
+
+  @override
+  Future<List<Business>> getActiveBusinesses() async {
+    try {
+      final querySnapshot = await _firestore
+          .collection(_collection)
+          .where('isActive', isEqualTo: true)
+          .get();
+
+      final businesses = querySnapshot.docs
+          .map((doc) => Business.fromJson(doc.data()))
+          .toList();
+
+      // Ordenar en memoria por createdAt descendente
+      businesses.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+
+      return businesses;
+    } catch (e) {
+      throw _handleFirestoreException(e, 'Error getting active businesses');
+    }
+  }
+
+  @override
+  Future<void> updateBusiness(Business business) async {
+    try {
+      final updatedBusiness = business.copyWith(updatedAt: DateTime.now());
+      await _firestore
+          .collection(_collection)
+          .doc(business.id)
+          .update(updatedBusiness.toJson());
+    } catch (e) {
+      throw _handleFirestoreException(e, 'Error updating business');
+    }
+  }
+
+  @override
+  Future<void> deleteBusiness(String businessId) async {
+    try {
+      await _firestore.collection(_collection).doc(businessId).delete();
+    } catch (e) {
+      throw _handleFirestoreException(e, 'Error deleting business');
+    }
+  }
+
+  @override
+  Future<void> toggleBusinessStatus(String businessId, bool isActive) async {
+    try {
+      await _firestore.collection(_collection).doc(businessId).update({
+        'isActive': isActive,
+        'updatedAt': DateTime.now().toIso8601String(),
+      });
+    } catch (e) {
+      throw _handleFirestoreException(e, 'Error toggling business status');
+    }
+  }
+
+  @override
+  Stream<List<Business>> watchAllBusinesses() {
+    try {
+      return _firestore.collection(_collection).snapshots().map((snapshot) {
+        final businesses = snapshot.docs
+            .map((doc) => Business.fromJson(doc.data()))
+            .toList();
+
+        // Ordenar en memoria por createdAt descendente
+        businesses.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+
+        return businesses;
+      });
+    } catch (e) {
+      throw _handleFirestoreException(e, 'Error watching all businesses');
+    }
+  }
+
+  @override
+  Stream<List<Business>> watchActiveBusinesses() {
+    try {
+      return _firestore
+          .collection(_collection)
+          .where('isActive', isEqualTo: true)
+          .snapshots()
+          .map((snapshot) {
+            final businesses = snapshot.docs
+                .map((doc) => Business.fromJson(doc.data()))
+                .toList();
+
+            // Ordenar en memoria por createdAt descendente
+            businesses.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+
+            return businesses;
+          });
+    } catch (e) {
+      throw _handleFirestoreException(e, 'Error watching active businesses');
+    }
+  }
+
+  @override
+  Stream<Business?> watchBusiness(String businessId) {
+    try {
+      return _firestore.collection(_collection).doc(businessId).snapshots().map(
+        (doc) {
+          if (!doc.exists || doc.data() == null) {
+            return null;
+          }
+          return Business.fromJson(doc.data()!);
+        },
+      );
+    } catch (e) {
+      throw _handleFirestoreException(e, 'Error watching business');
+    }
+  }
+
+  /// Manejo centralizado de excepciones de Firestore
+  Exception _handleFirestoreException(dynamic error, String message) {
+    if (error is FirebaseException) {
+      return Exception('$message: ${error.message}');
+    }
+    return Exception('$message: $error');
   }
 }

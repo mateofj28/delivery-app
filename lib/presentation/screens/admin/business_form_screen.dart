@@ -4,7 +4,7 @@ import 'package:go_router/go_router.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../domain/entities/business.dart';
 import '../../providers/admin_provider.dart';
-import '../../providers/business_provider.dart';
+import '../../providers/business_management_provider.dart';
 
 class BusinessFormScreen extends ConsumerStatefulWidget {
   final String? businessId;
@@ -34,23 +34,46 @@ class _BusinessFormScreenState extends ConsumerState<BusinessFormScreen> {
   void initState() {
     super.initState();
     if (widget.businessId != null) {
-      _loadBusinessData();
+      // Retrasar la carga de datos hasta después de que el widget tree termine de construirse
+      Future.microtask(() => _loadBusinessData());
+    } else {
+      // Valores por defecto para nuevo negocio
+      _whatsappController.text = '+573026699574';
     }
   }
 
-  void _loadBusinessData() {
-    final businesses = ref.read(businessManagementProvider);
-    _existingBusiness = businesses.firstWhere(
-      (b) => b.id == widget.businessId,
-      orElse: () => throw Exception('Negocio no encontrado'),
-    );
+  Future<void> _loadBusinessData() async {
+    setState(() {
+      _isLoading = true;
+    });
 
-    _nameController.text = _existingBusiness!.name;
-    _iconController.text = _existingBusiness!.icon;
-    _whatsappController.text = _existingBusiness!.whatsappNumber;
-    _descriptionController.text = _existingBusiness!.description ?? '';
-    _addressController.text = _existingBusiness!.address ?? '';
-    _isActive = _existingBusiness!.isActive;
+    try {
+      final repository = ref.read(businessRepositoryProvider);
+      _existingBusiness = await repository.getBusinessById(widget.businessId!);
+
+      if (_existingBusiness != null) {
+        _nameController.text = _existingBusiness!.name;
+        _iconController.text = _existingBusiness!.icon;
+        _whatsappController.text = _existingBusiness!.whatsappNumber;
+        _descriptionController.text = _existingBusiness!.description ?? '';
+        _addressController.text = _existingBusiness!.address ?? '';
+        _isActive = _existingBusiness!.isActive;
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error al cargar el negocio: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+        context.go('/admin/businesses');
+      }
+    } finally {
+      setState(() {
+        _isLoading = false;
+      });
+    }
   }
 
   @override
@@ -69,44 +92,80 @@ class _BusinessFormScreenState extends ConsumerState<BusinessFormScreen> {
         _isLoading = true;
       });
 
-      final business = Business(
-        id: widget.businessId ??
-            DateTime.now().millisecondsSinceEpoch.toString(),
-        name: _nameController.text.trim(),
-        icon: _iconController.text.trim(),
-        whatsappNumber: _whatsappController.text.trim(),
-        products: _existingBusiness?.products ?? [],
-        isActive: _isActive,
-        description: _descriptionController.text.trim().isEmpty
-            ? null
-            : _descriptionController.text.trim(),
-        address: _addressController.text.trim().isEmpty
-            ? null
-            : _addressController.text.trim(),
-      );
+      try {
+        final business = widget.businessId != null
+            ? _existingBusiness!.copyWith(
+                name: _nameController.text.trim(),
+                icon: _iconController.text.trim(),
+                whatsappNumber: _whatsappController.text.trim(),
+                isActive: _isActive,
+                description: _descriptionController.text.trim().isEmpty
+                    ? null
+                    : _descriptionController.text.trim(),
+                address: _addressController.text.trim().isEmpty
+                    ? null
+                    : _addressController.text.trim(),
+              )
+            : Business.create(
+                name: _nameController.text.trim(),
+                icon: _iconController.text.trim(),
+                whatsappNumber: _whatsappController.text.trim(),
+                description: _descriptionController.text.trim().isEmpty
+                    ? null
+                    : _descriptionController.text.trim(),
+                address: _addressController.text.trim().isEmpty
+                    ? null
+                    : _addressController.text.trim(),
+              );
 
-      if (widget.businessId != null) {
-        ref.read(businessManagementProvider.notifier).updateBusiness(business);
-      } else {
-        ref.read(businessManagementProvider.notifier).addBusiness(business);
-      }
+        bool success;
+        if (widget.businessId != null) {
+          success = await ref
+              .read(businessManagementProvider.notifier)
+              .updateBusiness(business);
+        } else {
+          final businessId = await ref
+              .read(businessManagementProvider.notifier)
+              .createBusiness(business);
+          success = businessId != null;
+        }
 
-      setState(() {
-        _isLoading = false;
-      });
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              widget.businessId != null
-                  ? 'Negocio actualizado'
-                  : 'Negocio creado exitosamente',
-            ),
-            backgroundColor: Colors.green,
-          ),
-        );
-        context.go('/admin/businesses');
+        if (mounted) {
+          if (success) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(
+                  widget.businessId != null
+                      ? 'Negocio actualizado exitosamente'
+                      : 'Negocio creado exitosamente',
+                ),
+                backgroundColor: Colors.green,
+              ),
+            );
+            context.go('/admin/businesses');
+          } else {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(
+                  widget.businessId != null
+                      ? 'Error al actualizar el negocio'
+                      : 'Error al crear el negocio',
+                ),
+                backgroundColor: Colors.red,
+              ),
+            );
+          }
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+          );
+        }
+      } finally {
+        setState(() {
+          _isLoading = false;
+        });
       }
     }
   }
@@ -121,6 +180,14 @@ class _BusinessFormScreenState extends ConsumerState<BusinessFormScreen> {
       });
       return const Scaffold(
         body: Center(child: CircularProgressIndicator()),
+      );
+    }
+
+    if (_isLoading && widget.businessId != null) {
+      return Scaffold(
+        backgroundColor: AppColors.background,
+        appBar: AppBar(title: const Text('Cargando...')),
+        body: const Center(child: CircularProgressIndicator()),
       );
     }
 
@@ -162,6 +229,9 @@ class _BusinessFormScreenState extends ConsumerState<BusinessFormScreen> {
                         if (value == null || value.trim().isEmpty) {
                           return 'El nombre es requerido';
                         }
+                        if (value.trim().length < 2) {
+                          return 'El nombre debe tener al menos 2 caracteres';
+                        }
                         return null;
                       },
                     ),
@@ -187,6 +257,7 @@ class _BusinessFormScreenState extends ConsumerState<BusinessFormScreen> {
                         labelText: 'Número de WhatsApp *',
                         hintText: '+573026699574',
                         prefixIcon: Icon(Icons.phone),
+                        helperText: 'Incluye el código de país (+57)',
                       ),
                       keyboardType: TextInputType.phone,
                       validator: (value) {
@@ -195,6 +266,9 @@ class _BusinessFormScreenState extends ConsumerState<BusinessFormScreen> {
                         }
                         if (!value.startsWith('+')) {
                           return 'El número debe incluir el código de país (+57)';
+                        }
+                        if (value.length < 10) {
+                          return 'Número de teléfono inválido';
                         }
                         return null;
                       },
@@ -208,6 +282,14 @@ class _BusinessFormScreenState extends ConsumerState<BusinessFormScreen> {
                         prefixIcon: Icon(Icons.description),
                       ),
                       maxLines: 3,
+                      validator: (value) {
+                        if (value != null &&
+                            value.trim().isNotEmpty &&
+                            value.trim().length < 10) {
+                          return 'La descripción debe tener al menos 10 caracteres';
+                        }
+                        return null;
+                      },
                     ),
                     const SizedBox(height: 16),
                     TextFormField(
@@ -222,8 +304,9 @@ class _BusinessFormScreenState extends ConsumerState<BusinessFormScreen> {
                     const SizedBox(height: 24),
                     SwitchListTile(
                       title: const Text('Negocio activo'),
-                      subtitle:
-                          const Text('Los clientes pueden ver este negocio'),
+                      subtitle: const Text(
+                        'Los clientes pueden ver este negocio',
+                      ),
                       value: _isActive,
                       onChanged: (value) {
                         setState(() {
@@ -231,6 +314,44 @@ class _BusinessFormScreenState extends ConsumerState<BusinessFormScreen> {
                         });
                       },
                       activeColor: AppColors.primary,
+                    ),
+                    const SizedBox(height: 16),
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: AppColors.accent.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              const Icon(
+                                Icons.info_outline,
+                                color: AppColors.accent,
+                                size: 20,
+                              ),
+                              const SizedBox(width: 8),
+                              Text(
+                                'Información importante',
+                                style: Theme.of(context).textTheme.titleSmall
+                                    ?.copyWith(
+                                      fontWeight: FontWeight.bold,
+                                      color: AppColors.accent,
+                                    ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          const Text(
+                            '• Los pedidos se enviarán al número de WhatsApp configurado\n'
+                            '• El ícono aparecerá en la lista de negocios\n'
+                            '• Solo los negocios activos son visibles para los clientes',
+                            style: TextStyle(fontSize: 13),
+                          ),
+                        ],
+                      ),
                     ),
                   ],
                 ),

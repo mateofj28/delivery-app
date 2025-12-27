@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../providers/admin_provider.dart';
-import '../../providers/business_provider.dart';
+import '../../providers/business_management_provider.dart';
 
 class AdminDashboardScreen extends ConsumerWidget {
   const AdminDashboardScreen({super.key});
@@ -11,7 +11,7 @@ class AdminDashboardScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final admin = ref.watch(adminProvider);
-    final businessListAsync = ref.watch(businessListProvider);
+    final businessState = ref.watch(businessManagementProvider);
 
     if (admin == null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -22,11 +22,67 @@ class AdminDashboardScreen extends ConsumerWidget {
       );
     }
 
+    if (businessState.isLoading) {
+      return Scaffold(
+        backgroundColor: AppColors.background,
+        appBar: AppBar(
+          title: const Text('Panel de Administración'),
+          actions: [
+            IconButton(
+              icon: const Icon(Icons.logout),
+              onPressed: () {
+                ref.read(adminProvider.notifier).logout();
+                context.go('/');
+              },
+            ),
+          ],
+        ),
+        body: const Center(child: CircularProgressIndicator()),
+      );
+    }
+
+    if (businessState.error != null) {
+      return Scaffold(
+        backgroundColor: AppColors.background,
+        appBar: AppBar(
+          title: const Text('Panel de Administración'),
+          actions: [
+            IconButton(
+              icon: const Icon(Icons.logout),
+              onPressed: () {
+                ref.read(adminProvider.notifier).logout();
+                context.go('/');
+              },
+            ),
+          ],
+        ),
+        body: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text('Error al cargar datos: ${businessState.error}'),
+              const SizedBox(height: 16),
+              ElevatedButton(
+                onPressed: () => ref.read(businessManagementProvider.notifier).loadBusinesses(),
+                child: const Text('Reintentar'),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    final businesses = businessState.businesses;
+
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
         title: const Text('Panel de Administración'),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            onPressed: () => ref.read(businessManagementProvider.notifier).loadBusinesses(),
+          ),
           IconButton(
             icon: const Icon(Icons.logout),
             onPressed: () {
@@ -36,101 +92,86 @@ class AdminDashboardScreen extends ConsumerWidget {
           ),
         ],
       ),
-      body: businessListAsync.when(
-        data: (businesses) {
-          // Cargar negocios en el provider de gestión
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            ref
-                .read(businessManagementProvider.notifier)
-                .loadBusinesses(businesses);
-          });
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Bienvenida
+            Text(
+              'Bienvenido, ${admin.username}',
+              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+            ),
 
-          return SingleChildScrollView(
-            padding: const EdgeInsets.all(24),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+            const SizedBox(height: 8),
+
+            Text(
+              'Gestiona los negocios y sus productos',
+              style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                    color: AppColors.textSecondary,
+                  ),
+            ),
+
+            const SizedBox(height: 32),
+
+            // Estadísticas
+            Row(
               children: [
-                // Bienvenida
-                Text(
-                  'Bienvenido, ${admin.username}',
-                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                        fontWeight: FontWeight.bold,
-                      ),
+                Expanded(
+                  child: _StatCard(
+                    icon: Icons.store,
+                    title: 'Negocios',
+                    value: businesses.length.toString(),
+                    color: AppColors.primary,
+                  ),
                 ),
-
-                const SizedBox(height: 8),
-
-                Text(
-                  'Gestiona los negocios y sus productos',
-                  style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                        color: AppColors.textSecondary,
-                      ),
-                ),
-
-                const SizedBox(height: 32),
-
-                // Estadísticas
-                Row(
-                  children: [
-                    Expanded(
-                      child: _StatCard(
-                        icon: Icons.store,
-                        title: 'Negocios',
-                        value: businesses.length.toString(),
-                        color: AppColors.primary,
-                      ),
-                    ),
-                    const SizedBox(width: 16),
-                    Expanded(
-                      child: _StatCard(
-                        icon: Icons.restaurant_menu,
-                        title: 'Productos',
-                        value: businesses
-                            .fold<int>(
-                              0,
-                              (sum, business) => sum + business.products.length,
-                            )
-                            .toString(),
-                        color: AppColors.accent,
-                      ),
-                    ),
-                  ],
-                ),
-
-                const SizedBox(height: 32),
-
-                // Acciones principales
-                Text(
-                  'Acciones rápidas',
-                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                        fontWeight: FontWeight.bold,
-                      ),
-                ),
-
-                const SizedBox(height: 16),
-
-                _ActionCard(
-                  icon: Icons.add_business,
-                  title: 'Crear Nuevo Negocio',
-                  description: 'Agrega un nuevo negocio al sistema',
-                  onTap: () => context.go('/admin/business/create'),
-                ),
-
-                const SizedBox(height: 12),
-
-                _ActionCard(
-                  icon: Icons.business,
-                  title: 'Gestionar Negocios',
-                  description: 'Ver, editar o eliminar negocios existentes',
-                  onTap: () => context.go('/admin/businesses'),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: _StatCard(
+                    icon: Icons.restaurant_menu,
+                    title: 'Productos',
+                    value: businesses
+                        .fold<int>(
+                          0,
+                          (sum, business) => sum + business.products.length,
+                        )
+                        .toString(),
+                    color: AppColors.accent,
+                  ),
                 ),
               ],
             ),
-          );
-        },
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (error, stack) => Center(
-          child: Text('Error al cargar datos: $error'),
+
+            const SizedBox(height: 32),
+
+            // Acciones principales
+            Text(
+              'Acciones rápidas',
+              style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+            ),
+
+            const SizedBox(height: 16),
+
+            _ActionCard(
+              icon: Icons.add_business,
+              title: 'Crear Nuevo Negocio',
+              description: 'Agrega un nuevo negocio al sistema',
+              onTap: () => context.go('/admin/business/create'),
+            ),
+
+            const SizedBox(height: 12),
+
+            _ActionCard(
+              icon: Icons.business,
+              title: 'Gestionar Negocios',
+              description: 'Ver, editar o eliminar negocios existentes',
+              onTap: () => context.go('/admin/businesses'),
+            ),
+          ],
         ),
       ),
     );
@@ -155,7 +196,7 @@ class _StatCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
+        color: color.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(16),
       ),
       child: Column(
@@ -215,7 +256,7 @@ class _ActionCard extends StatelessWidget {
                 Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: AppColors.primary.withOpacity(0.1),
+                    color: AppColors.primary.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Icon(icon, color: AppColors.primary, size: 28),

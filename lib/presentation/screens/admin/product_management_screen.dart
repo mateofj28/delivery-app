@@ -5,7 +5,8 @@ import '../../../core/constants/app_colors.dart';
 import '../../../core/utils/price_formatter.dart';
 import '../../../domain/entities/business.dart';
 import '../../providers/admin_provider.dart';
-import '../../providers/business_provider.dart';
+import '../../providers/business_management_provider.dart';
+import '../../providers/product_management_provider.dart';
 
 class ProductManagementScreen extends ConsumerWidget {
   final String businessId;
@@ -18,7 +19,7 @@ class ProductManagementScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final admin = ref.watch(adminProvider);
-    final businesses = ref.watch(businessManagementProvider);
+    final businessAsync = ref.watch(businessStreamProvider(businessId));
 
     if (admin == null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -29,40 +30,165 @@ class ProductManagementScreen extends ConsumerWidget {
       );
     }
 
-    final business = businesses.firstWhere(
-      (b) => b.id == businessId,
-      orElse: () => throw Exception('Negocio no encontrado'),
-    );
+    return businessAsync.when(
+      data: (business) {
+        if (business == null) {
+          return Scaffold(
+            backgroundColor: AppColors.background,
+            appBar: AppBar(
+              title: const Text('Negocio no encontrado'),
+              leading: IconButton(
+                icon: const Icon(Icons.arrow_back),
+                onPressed: () => context.go('/admin/businesses'),
+              ),
+            ),
+            body: const Center(
+              child: Text('El negocio no existe o fue eliminado'),
+            ),
+          );
+        }
 
-    return Scaffold(
-      backgroundColor: AppColors.background,
-      appBar: AppBar(
-        title: Text('Productos - ${business.name}'),
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
-          onPressed: () => context.go('/admin/businesses'),
+        return Scaffold(
+          backgroundColor: AppColors.background,
+          appBar: AppBar(
+            title: Text('Productos - ${business.name}'),
+            leading: IconButton(
+              icon: const Icon(Icons.arrow_back),
+              onPressed: () => context.go('/admin/businesses'),
+            ),
+            actions: [
+              IconButton(
+                icon: const Icon(Icons.refresh),
+                onPressed: () =>
+                    ref.refresh(businessStreamProvider(businessId)),
+              ),
+            ],
+          ),
+          body: _ProductsList(business: business),
+          // Solo mostrar FAB si hay productos
+          floatingActionButton: business.products.isNotEmpty
+              ? FloatingActionButton.extended(
+                  backgroundColor: AppColors.primary,
+                  foregroundColor: AppColors.onPrimary,
+                  onPressed: () =>
+                      context.go('/admin/business/$businessId/product/create'),
+                  icon: const Icon(Icons.add),
+                  label: const Text('Nuevo Producto'),
+                )
+              : null,
+        );
+      },
+      loading: () => Scaffold(
+        backgroundColor: AppColors.background,
+        appBar: AppBar(
+          title: const Text('Cargando...'),
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back),
+            onPressed: () => context.go('/admin/businesses'),
+          ),
+        ),
+        body: const Center(child: CircularProgressIndicator()),
+      ),
+      error: (error, stack) => Scaffold(
+        backgroundColor: AppColors.background,
+        appBar: AppBar(
+          title: const Text('Error'),
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back),
+            onPressed: () => context.go('/admin/businesses'),
+          ),
+        ),
+        body: _ErrorState(
+          error: error.toString(),
+          onRetry: () => ref.refresh(businessStreamProvider(businessId)),
         ),
       ),
-      body: business.products.isEmpty
-          ? _EmptyState(businessId: businessId)
-          : ListView.builder(
-              padding: const EdgeInsets.all(16),
-              itemCount: business.products.length,
-              itemBuilder: (context, index) {
-                final product = business.products[index];
-                return _ProductCard(
-                  product: product,
-                  businessId: businessId,
-                );
-              },
+    );
+  }
+}
+
+class _ProductsList extends ConsumerWidget {
+  final Business business;
+
+  const _ProductsList({required this.business});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    // Usar el stream provider para obtener productos en tiempo real
+    final productsAsync = ref.watch(productsStreamProvider(business.id));
+
+    return productsAsync.when(
+      data: (products) {
+        if (products.isEmpty) {
+          return _EmptyState(businessId: business.id);
+        }
+        return RefreshIndicator(
+          onRefresh: () async {
+            ref.invalidate(productsStreamProvider(business.id));
+          },
+          child: ListView.builder(
+            padding: const EdgeInsets.all(16),
+            itemCount: products.length,
+            itemBuilder: (context, index) {
+              final product = products[index];
+              return _ProductCard(product: product, businessId: business.id);
+            },
+          ),
+        );
+      },
+      loading: () => const Center(child: CircularProgressIndicator()),
+      error: (error, stack) => _ErrorState(
+        error: error.toString(),
+        onRetry: () => ref.refresh(productsStreamProvider(business.id)),
+      ),
+    );
+  }
+}
+
+class _ErrorState extends StatelessWidget {
+  final String error;
+  final VoidCallback onRetry;
+
+  const _ErrorState({required this.error, required this.onRetry});
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            Icons.error_outline,
+            size: 80,
+            color: Colors.red.withValues(alpha: 0.5),
+          ),
+          const SizedBox(height: 16),
+          Text(
+            'Error al cargar datos',
+            style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                  color: AppColors.textSecondary,
+                ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            error,
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  color: AppColors.textSecondary,
+                ),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 24),
+          ElevatedButton.icon(
+            onPressed: onRetry,
+            icon: const Icon(Icons.refresh),
+            label: const Text('Reintentar'),
+            style: ElevatedButton.styleFrom(
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(25),
+              ),
             ),
-      floatingActionButton: FloatingActionButton.extended(
-        backgroundColor: AppColors.primary,
-        foregroundColor: AppColors.onPrimary,
-        onPressed: () =>
-            context.go('/admin/business/$businessId/product/create'),
-        icon: const Icon(Icons.add),
-        label: const Text('Nuevo Producto'),
+          ),
+        ],
       ),
     );
   }
@@ -76,36 +202,61 @@ class _EmptyState extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(
-            Icons.restaurant_menu_outlined,
-            size: 80,
-            color: AppColors.textSecondary.withOpacity(0.5),
-          ),
-          const SizedBox(height: 16),
-          Text(
-            'No hay productos registrados',
-            style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                  color: AppColors.textSecondary,
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              width: 120,
+              height: 120,
+              decoration: BoxDecoration(
+                color: AppColors.accent.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(60),
+              ),
+              child: Icon(
+                Icons.restaurant_menu_outlined,
+                size: 60,
+                color: AppColors.accent,
+              ),
+            ),
+            const SizedBox(height: 32),
+            Text(
+              'No hay productos registrados',
+              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                color: AppColors.textPrimary,
+                fontWeight: FontWeight.bold,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'Agrega el primer producto al menú de este negocio.\nLos productos aparecerán aquí una vez creados.',
+              style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                color: AppColors.textSecondary,
+                height: 1.5,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 40),
+            Container(
+              width: double.infinity,
+              constraints: const BoxConstraints(maxWidth: 280),
+              child: ElevatedButton.icon(
+                onPressed: () =>
+                    context.go('/admin/business/$businessId/product/create'),
+                icon: const Icon(Icons.add),
+                label: const Text('Crear Primer Producto'),
+                style: ElevatedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(25),
+                  ),
                 ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'Agrega el primer producto al menú',
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: AppColors.textSecondary,
-                ),
-          ),
-          const SizedBox(height: 24),
-          ElevatedButton.icon(
-            onPressed: () =>
-                context.go('/admin/business/$businessId/product/create'),
-            icon: const Icon(Icons.add),
-            label: const Text('Crear Producto'),
-          ),
-        ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -133,14 +284,24 @@ class _ProductCard extends ConsumerWidget {
             child: const Text('Cancelar'),
           ),
           TextButton(
-            onPressed: () {
-              ref
-                  .read(businessManagementProvider.notifier)
-                  .deleteProductFromBusiness(businessId, product.id);
+            onPressed: () async {
               Navigator.of(context).pop();
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text('${product.name} eliminado')),
-              );
+              final success = await ref
+                  .read(productManagementProvider.notifier)
+                  .deleteProduct(businessId, product.id);
+
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(
+                      success
+                          ? '${product.name} eliminado exitosamente'
+                          : 'Error al eliminar ${product.name}',
+                    ),
+                    backgroundColor: success ? Colors.green : Colors.red,
+                  ),
+                );
+              }
             },
             style: TextButton.styleFrom(foregroundColor: Colors.red),
             child: const Text('Eliminar'),
@@ -236,7 +397,9 @@ class _ProductCard extends ConsumerWidget {
                                   padding: const EdgeInsets.symmetric(
                                       horizontal: 8, vertical: 4),
                                   decoration: BoxDecoration(
-                                    color: AppColors.accent.withOpacity(0.2),
+                                    color: AppColors.accent.withValues(
+                                      alpha: 0.2,
+                                    ),
                                     borderRadius: BorderRadius.circular(8),
                                   ),
                                   child: Text(
