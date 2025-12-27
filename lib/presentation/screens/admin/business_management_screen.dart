@@ -241,106 +241,119 @@ class _BusinessCard extends ConsumerWidget {
       ),
       child: Padding(
         padding: const EdgeInsets.all(20),
-        child: Row(
+        child: Column(
           children: [
-            // Icono del negocio
-            Container(
-              width: 60,
-              height: 60,
-              decoration: BoxDecoration(
-                color: AppColors.primary.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(16),
-              ),
-              child: Center(
-                child: Text(
-                  business.icon,
-                  style: const TextStyle(fontSize: 28),
-                ),
-              ),
-            ),
-            const SizedBox(width: 16),
-            
-            // Información del negocio
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Nombre del negocio
-                  Text(
-                    business.name,
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.bold,
-                      color: AppColors.textPrimary,
-                    ),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  const SizedBox(height: 8),
-
-                  // Estado activo/inactivo
-                  Row(
-                    children: [
-                      Container(
-                        width: 8,
-                        height: 8,
-                        decoration: BoxDecoration(
-                          color: business.isActive ? Colors.green : Colors.red,
-                          shape: BoxShape.circle,
-                        ),
-                      ),
-                      const SizedBox(width: 6),
-                      Text(
-                        business.isActive ? 'Activo' : 'Inactivo',
-                        style: TextStyle(
-                          color: business.isActive ? Colors.green : Colors.red,
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-
-                  // Información de productos y fecha
-                  Row(
-                    children: [
-                      const Icon(
-                        Icons.restaurant_menu,
-                        size: 14,
-                        color: AppColors.textSecondary,
-                      ),
-                      const SizedBox(width: 4),
-                      Text(
-                        '${business.products.length} productos',
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: AppColors.textSecondary,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                      const SizedBox(width: 16),
-                      const Icon(
-                        Icons.calendar_today,
-                        size: 14,
-                        color: AppColors.textSecondary,
-                      ),
-                      const SizedBox(width: 4),
-                      Flexible(
-                        child: Text(
-                          _formatDate(business.createdAt),
-                          style: Theme.of(context).textTheme.bodySmall
-                              ?.copyWith(color: AppColors.textSecondary),
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-            
-            // Botones de acción circulares
+            // Fila principal con icono e información
             Row(
-              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Icono del negocio
+                Container(
+                  width: 60,
+                  height: 60,
+                  decoration: BoxDecoration(
+                    color: AppColors.primary.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: Center(
+                    child: Text(
+                      business.icon,
+                      style: const TextStyle(fontSize: 28),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 16),
+
+                // Información del negocio
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Nombre del negocio
+                      Text(
+                        business.name,
+                        style: Theme.of(context).textTheme.titleMedium
+                            ?.copyWith(
+                              fontWeight: FontWeight.bold,
+                              color: AppColors.textPrimary,
+                            ),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 8),
+
+                      // Estado activo/inactivo
+                      Row(
+                        children: [
+                          Container(
+                            width: 8,
+                            height: 8,
+                            decoration: BoxDecoration(
+                              color: business.isActive
+                                  ? Colors.green
+                                  : Colors.red,
+                              shape: BoxShape.circle,
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            business.isActive ? 'Activo' : 'Inactivo',
+                            style: TextStyle(
+                              color: business.isActive
+                                  ? Colors.green
+                                  : Colors.red,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+
+                      // Información de productos y fecha
+                      Row(
+                        children: [
+                          const Icon(
+                            Icons.restaurant_menu,
+                            size: 14,
+                            color: AppColors.textSecondary,
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            '${business.products.length} productos',
+                            style: Theme.of(context).textTheme.bodySmall
+                                ?.copyWith(
+                                  color: AppColors.textSecondary,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                          ),
+                          const SizedBox(width: 16),
+                          const Icon(
+                            Icons.calendar_today,
+                            size: 14,
+                            color: AppColors.textSecondary,
+                          ),
+                          const SizedBox(width: 4),
+                          Expanded(
+                            child: Text(
+                              _formatDate(business.createdAt),
+                              style: Theme.of(context).textTheme.bodySmall
+                                  ?.copyWith(color: AppColors.textSecondary),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            
+            const SizedBox(height: 16),
+
+            // Fila de botones de acción
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
               children: [
                 // Botón productos
                 Container(
@@ -359,7 +372,7 @@ class _BusinessCard extends ConsumerWidget {
                     tooltip: 'Ver productos',
                   ),
                 ),
-                const SizedBox(width: 8),
+                const SizedBox(width: 12),
                 
                 // Botón editar
                 Container(
@@ -375,7 +388,7 @@ class _BusinessCard extends ConsumerWidget {
                     tooltip: 'Editar negocio',
                   ),
                 ),
-                const SizedBox(width: 8),
+                const SizedBox(width: 12),
                 
                 // Botón eliminar
                 Container(

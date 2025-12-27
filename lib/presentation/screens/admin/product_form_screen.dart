@@ -2,11 +2,40 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:intl/intl.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../domain/entities/business.dart';
 import '../../providers/admin_provider.dart';
 import '../../providers/product_management_provider.dart';
 import '../../providers/business_management_provider.dart';
+
+class PriceFormatter extends TextInputFormatter {
+  @override
+  TextEditingValue formatEditUpdate(
+    TextEditingValue oldValue,
+    TextEditingValue newValue,
+  ) {
+    if (newValue.text.isEmpty) {
+      return newValue;
+    }
+
+    // Solo permitir dígitos
+    String digitsOnly = newValue.text.replaceAll(RegExp(r'[^\d]'), '');
+
+    if (digitsOnly.isEmpty) {
+      return const TextEditingValue();
+    }
+
+    // Formatear con separadores de miles
+    int number = int.parse(digitsOnly);
+    String formatted = NumberFormat('#,###', 'es_CO').format(number);
+
+    return TextEditingValue(
+      text: formatted,
+      selection: TextSelection.collapsed(offset: formatted.length),
+    );
+  }
+}
 
 class ProductFormScreen extends ConsumerStatefulWidget {
   final String businessId;
@@ -48,7 +77,6 @@ class _ProductFormScreenState extends ConsumerState<ProductFormScreen> {
   @override
   void initState() {
     super.initState();
-    // Retrasar la carga de datos hasta después de que el widget tree termine de construirse
     Future.microtask(() => _loadData());
   }
 
@@ -58,7 +86,6 @@ class _ProductFormScreenState extends ConsumerState<ProductFormScreen> {
     });
 
     try {
-      // Cargar productos del negocio
       await ref
           .read(productManagementProvider.notifier)
           .loadProductsByBusiness(widget.businessId);
@@ -72,7 +99,8 @@ class _ProductFormScreenState extends ConsumerState<ProductFormScreen> {
 
         if (_existingProduct != null) {
           _nameController.text = _existingProduct!.name;
-          _priceController.text = _existingProduct!.price.toString();
+          // Formatear el precio como entero sin decimales
+          _priceController.text = _existingProduct!.price.toInt().toString();
           _descriptionController.text = _existingProduct!.description;
           _categoryController.text = _existingProduct!.category ?? '';
           _imageUrlController.text = _existingProduct!.imageUrl ?? '';
@@ -80,7 +108,6 @@ class _ProductFormScreenState extends ConsumerState<ProductFormScreen> {
         }
       }
 
-      // Obtener nombre del negocio
       final businessRepository = ref.read(businessRepositoryProvider);
       final business = await businessRepository.getBusinessById(
         widget.businessId,
@@ -119,10 +146,17 @@ class _ProductFormScreenState extends ConsumerState<ProductFormScreen> {
       });
 
       try {
+        // Convertir el precio formateado a double
+        String priceText = _priceController.text.replaceAll(
+          RegExp(r'[^\d]'),
+          '',
+        );
+        double price = double.parse(priceText);
+
         final product = widget.productId != null
             ? _existingProduct!.copyWith(
                 name: _nameController.text.trim(),
-                price: double.parse(_priceController.text.trim()),
+                price: price,
                 description: _descriptionController.text.trim(),
                 category: _categoryController.text.trim().isEmpty
                     ? null
@@ -134,7 +168,7 @@ class _ProductFormScreenState extends ConsumerState<ProductFormScreen> {
               )
             : Product.create(
                 name: _nameController.text.trim(),
-                price: double.parse(_priceController.text.trim()),
+                price: price,
                 description: _descriptionController.text.trim(),
                 category: _categoryController.text.trim().isEmpty
                     ? null
@@ -323,21 +357,23 @@ class _ProductFormScreenState extends ConsumerState<ProductFormScreen> {
                       controller: _priceController,
                       decoration: const InputDecoration(
                         labelText: 'Precio *',
-                        hintText: '25000',
+                        hintText: 'Ingresa el precio',
                         prefixIcon: Icon(Icons.attach_money),
                         suffixText: 'COP',
                       ),
                       keyboardType: TextInputType.number,
                       inputFormatters: [
-                        FilteringTextInputFormatter.allow(
-                          RegExp(r'^\d+\.?\d{0,2}'),
-                        ),
+                        PriceFormatter(),
                       ],
                       validator: (value) {
                         if (value == null || value.trim().isEmpty) {
                           return 'El precio es requerido';
                         }
-                        final price = double.tryParse(value);
+                        String cleanValue = value.replaceAll(
+                          RegExp(r'[^\d]'),
+                          '',
+                        );
+                        final price = double.tryParse(cleanValue);
                         if (price == null || price <= 0) {
                           return 'Ingresa un precio válido mayor a 0';
                         }
